@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { fromRelay, type RelayResults } from "../../../lib/apibay";
-import { pick, rateLabel } from "../../../lib/pick";
+import { ofThisShow, pick, rateLabel } from "../../../lib/pick";
 import { RelayError, relayConfig, relayFetch } from "../../../lib/relay";
 
 /* Pick and play: one request from "I want this episode" to "here is the magnet".
@@ -15,6 +15,8 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const terms = (params.get("q") ?? "").trim();
   const runtime = Number(params.get("runtime")) || 45;
+  const country = params.get("country") || null;
+  const tagged = terms.match(/^(.*\S)\s+(S\d+E\d+)$/i);
 
   if (!terms) {
     return NextResponse.json({ error: "nothing to search for" }, { status: 400 });
@@ -39,7 +41,9 @@ export async function GET(request: Request) {
 
   try {
     const results = (await relayFetch("/search", forwarded, relay)) as RelayResults;
-    const hits = results.hits.map(fromRelay);
+    const hits = results.hits
+      .map(fromRelay)
+      .filter((hit) => !tagged || ofThisShow(hit.name, tagged[1], tagged[2], country));
     const choice = pick(hits, runtime);
 
     if (!choice) {

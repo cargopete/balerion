@@ -39,6 +39,37 @@ function isCam(hit: Hit): boolean {
   return /\b(cam|ts|telesync|hdts|camrip)\b/i.test(hit.name);
 }
 
+/** How release names spell a country, by TVmaze's ISO code. */
+const COUNTRY_WORDS: Record<string, string[]> = {
+  GB: ["uk", "gb"],
+  US: ["us", "usa"],
+  AU: ["au", "aus"],
+};
+
+function words(text: string): string[] {
+  return text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+}
+
+/**
+ * Whether a release is this show's episode rather than a remake's.
+ *
+ * apibay matches words, not titles, so "Top Gear S01E08" also finds Top Gear
+ * Australia and Top Gear America. Between the title and the tag a name may
+ * carry only a year or the show's own country.
+ */
+export function ofThisShow(name: string, title: string, tag: string, country: string | null): boolean {
+  const have = words(name);
+  const want = words(title);
+  if (want.some((word, i) => have[i] !== word)) return false;
+  const allowed = new Set(COUNTRY_WORDS[country ?? ""] ?? (country ? [country.toLowerCase()] : []));
+  const target = tag.toLowerCase();
+  for (const word of have.slice(want.length)) {
+    if (word === target) return true;
+    if (!/^(19|20)\d\d$/.test(word) && !allowed.has(word)) return false;
+  }
+  return false;
+}
+
 /**
  * Pick one, or null when there is nothing worth picking.
  *

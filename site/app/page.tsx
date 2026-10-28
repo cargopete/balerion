@@ -13,6 +13,7 @@ type Show = {
   genres: string[];
   summary: string | null;
   poster: string | null;
+  country: string | null;
 };
 
 type Episode = {
@@ -422,6 +423,7 @@ export default function Page() {
       const query = new URLSearchParams({
         q: apibayQuery(openShow, episode.tag),
         runtime: String(episode.runtime ?? 45),
+        country: openShow.country ?? "",
       });
       const response = await fetch(`/api/pick?${query}`);
       const body = await response.json();

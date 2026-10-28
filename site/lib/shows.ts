@@ -26,6 +26,8 @@ export type Show = {
   weight: number;
   summary: string | null;
   poster: string | null;
+  /** ISO code of the network's country, for telling a show from its foreign remakes. */
+  country: string | null;
 };
 
 export type Episode = {
@@ -56,7 +58,9 @@ type RawShow = Record<string, unknown>;
 
 function toShow(raw: RawShow): Show {
   const image = (raw.image ?? {}) as Record<string, string>;
+  const channel = (raw.network ?? raw.webChannel ?? {}) as { country?: { code?: string } | null };
   return {
+    country: channel.country?.code ?? null,
     id: Number(raw.id),
     name: String(raw.name ?? ""),
     premiered: (raw.premiered as string) ?? null,
