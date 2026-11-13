@@ -1,0 +1,86 @@
+# yatr - https://github.com/cargopete/yatr
+#
+# The commands CI runs, by name: .github/workflows/ci.yml calls these tasks,
+# so `yatr ci` locally is the same gate. The aggregate is `ci`, not `check`,
+# because `yatr check` is a builtin and shadows a task of that name.
+
+[env]
+CARGO_TERM_COLOR = "always"
+RUST_BACKTRACE = "1"
+
+[settings]
+cache = true
+
+[tasks.fmt]
+desc = "Format the tree"
+run = ["cargo fmt --all"]
+no_cache = true
+
+[tasks.fmt-check]
+desc = "Fail if the tree is unformatted (CI: Formatting)"
+run = ["cargo fmt --all --check"]
+sources = ["**/*.rs"]
+
+[tasks.lint]
+desc = "Clippy with warnings denied (CI: Clippy)"
+run = ["cargo clippy --workspace --all-targets --locked -- -D warnings"]
+sources = ["**/*.rs", "**/Cargo.toml", "Cargo.lock"]
+
+[tasks.test]
+desc = "The offline suite (CI: Test)"
+run = ["cargo test --workspace --locked"]
+sources = ["**/*.rs", "**/Cargo.toml", "Cargo.lock"]
+watch = ["**/*.rs"]
+
+# What nightly.yml runs. Single-threaded because archive.org rate-limits, and
+# never cached: the point is to ask the live server again.
+[tasks.test-live]
+desc = "The ignored tests that hit archive.org (nightly)"
+run = ["cargo test -p balerion-ia --locked -- --ignored --test-threads=1"]
+no_cache = true
+
+[tasks.build]
+desc = "Release build of the CLI"
+run = ["cargo build --release --locked -p balerion-cli"]
+sources = ["**/*.rs", "**/Cargo.toml", "Cargo.lock"]
+
+[tasks.site-install]
+desc = "npm ci for the search front end"
+cwd = "site"
+run = ["npm ci"]
+sources = ["package.json", "package-lock.json"]
+no_cache = true
+
+[tasks.site-types]
+desc = "Typecheck the search front end (CI: Types)"
+cwd = "site"
+depends = ["site-install"]
+run = ["npx tsc --noEmit"]
+sources = ["app/**", "lib/**", "middleware.ts", "tsconfig.json", "package-lock.json"]
+
+[tasks.site-build]
+desc = "next build of the search front end (CI: Build)"
+cwd = "site"
+depends = ["site-install"]
+run = ["npx next build"]
+sources = ["app/**", "lib/**", "middleware.ts", "tsconfig.json", "package-lock.json"]
+
+[tasks.site-dev]
+desc = "Next dev server"
+cwd = "site"
+foreground = true
+run = ["npx next dev"]
+
+[tasks.player-test]
+desc = "The player's arithmetic under node --test (CI: Player arithmetic)"
+cwd = "crates/balerion-web/assets"
+run = ["node --test"]
+sources = ["*.js"]
+
+[tasks.js]
+desc = "What the CI javascript job runs"
+depends = ["site-types", "site-build", "player-test"]
+
+[tasks.ci]
+desc = "fmt-check, lint, test and the javascript job"
+depends = ["fmt-check", "lint", "test", "js"]
