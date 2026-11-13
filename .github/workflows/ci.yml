@@ -13,6 +13,9 @@ env:
   # A backtrace costs nothing here and turns "assertion failed" into something
   # you can act on without reproducing it locally.
   RUST_BACKTRACE: 1
+  # The commands CI runs live in yatr.toml, so `yatr ci` locally is the same
+  # gate. Bump deliberately.
+  YATR_VERSION: "1.1.0"
 
 concurrency:
   # A second push to the same branch makes the first run irrelevant.
@@ -32,13 +35,28 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Cache yatr
+        id: cache-yatr
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/yatr
+          key: yatr-${{ runner.os }}-${{ env.YATR_VERSION }}
+
+      # RUSTFLAGS is cleared so yatr, a different crate, does not inherit this
+      # project's flags.
+      - name: Install yatr
+        if: steps.cache-yatr.outputs.cache-hit != 'true'
+        run: cargo install yatr --version ${{ env.YATR_VERSION }} --locked
+        env:
+          RUSTFLAGS: ""
+
       - name: Formatting
-        run: cargo fmt --all --check
+        run: yatr fmt-check
 
       # Warnings are denied rather than printed: a warning nobody fails on is a
       # warning nobody reads.
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        run: yatr lint
 
   test:
     name: test (${{ matrix.os }})
@@ -67,6 +85,21 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Cache yatr
+        id: cache-yatr
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/yatr
+          key: yatr-${{ runner.os }}-${{ env.YATR_VERSION }}
+
+      # RUSTFLAGS is cleared so yatr, a different crate, does not inherit this
+      # project's flags.
+      - name: Install yatr
+        if: steps.cache-yatr.outputs.cache-hit != 'true'
+        run: cargo install yatr --version ${{ env.YATR_VERSION }} --locked
+        env:
+          RUSTFLAGS: ""
+
       - name: Install ffmpeg
         if: matrix.ffmpeg
         run: |
@@ -82,7 +115,7 @@ jobs:
       # dependency bump. The suite is entirely offline: the tests that touch
       # archive.org are marked ignored and are not run here.
       - name: Test
-        run: cargo test --workspace --locked
+        run: yatr test
 
   # Everything on this side of the wire. The search front end is TypeScript
   # talking to a relay over OIDC, and until this job existed nothing here looked
@@ -93,9 +126,6 @@ jobs:
     name: javascript
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: site
     steps:
       - uses: actions/checkout@v4
 
@@ -105,29 +135,41 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
 
-      # `ci` rather than `install`, so a lockfile that disagrees with
-      # package.json is a failure rather than a silent upgrade. The Rust side
-      # gets the same treatment from --locked.
-      - name: Install
-        run: npm ci
+      # yatr runs from the repository root: the task's own `cwd` puts it in
+      # site/. The Rust toolchain on the runner image is enough to install it.
+      - name: Cache yatr
+        id: cache-yatr
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/yatr
+          key: yatr-${{ runner.os }}-${{ env.YATR_VERSION }}
 
+      - name: Install yatr
+        if: steps.cache-yatr.outputs.cache-hit != 'true'
+        run: cargo install yatr --version ${{ env.YATR_VERSION }} --locked
+        env:
+          RUSTFLAGS: ""
+
+      # Each of these runs site-install first, which is `npm ci` rather than
+      # `install`, so a lockfile that disagrees with package.json is a failure
+      # rather than a silent upgrade.
+      #
       # Types first: it is the faster of the two and its failures are the ones
       # that read clearly.
       - name: Types
-        run: npx tsc --noEmit
+        run: yatr site-types
 
       # The build needs no secrets. BALERION_PASSWORD and the relay settings
       # are read at request time, and a deployment missing them refuses
       # callers rather than failing to compile.
       - name: Build
-        run: npx next build
+        run: yatr site-build
 
       # The local player's own arithmetic, which lives apart from its DOM code
       # precisely so that it can be run without a browser. No dependencies and
       # no framework: `node --test` is in the runtime.
       - name: Player arithmetic
-        working-directory: crates/balerion-web/assets
-        run: node --test
+        run: yatr player-test
 
   # A single job to require in branch protection, so the required check does
   # not have to be renamed every time the matrix changes.
