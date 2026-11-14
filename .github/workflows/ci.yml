@@ -15,7 +15,7 @@ env:
   RUST_BACKTRACE: 1
   # The commands CI runs live in yatr.toml, so `yatr ci` locally is the same
   # gate. Bump deliberately.
-  YATR_VERSION: "1.3.0"
+  YATR_VERSION: "1.5.0"
 
 concurrency:
   # A second push to the same branch makes the first run irrelevant.
